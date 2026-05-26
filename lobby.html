@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>캠스터디 로비</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <script>
+    const nickname = localStorage.getItem("currentNickname");
+
+    if (!nickname) {
+      alert("로그인 먼저 해!");
+      location.href = "login.html";
+    }
+  </script>
+
+  <div class="container">
+    <h1 id="welcome"></h1>
+
+    <button id="createRoomBtn">방 만들기</button>
+
+    <br><br>
+
+    <input id="roomCodeInput" type="text" placeholder="방 코드 입력">
+    <button id="joinRoomBtn">방 참가</button>
+  </div>
+
+  <script type="module" src="lobby.js"></script>
+
+</body>
+</html>
