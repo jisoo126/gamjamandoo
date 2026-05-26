@@ -2,7 +2,7 @@ import { db } from "./firebase.js";
 
 import {
   doc,
-  getDoc,
+  onSnapshot,
   updateDoc,
   arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -18,10 +18,9 @@ if (!roomCode || !nickname) {
   location.href = "lobby.html";
 }
 
-async function loadRoom() {
-  const roomRef = doc(db, "rooms", roomCode);
-  const snapshot = await getDoc(roomRef);
+const roomRef = doc(db, "rooms", roomCode);
 
+onSnapshot(roomRef, (snapshot) => {
   if (!snapshot.exists()) {
     alert("방이 없어졌어!");
     location.href = "lobby.html";
@@ -32,11 +31,9 @@ async function loadRoom() {
 
   roomTitle.innerText = `스터디룸 (${roomCode})`;
   memberList.innerText = `참가자: ${data.members.join(", ")}`;
-}
+});
 
 leaveRoomBtn.addEventListener("click", async () => {
-  const roomRef = doc(db, "rooms", roomCode);
-
   await updateDoc(roomRef, {
     members: arrayRemove(nickname)
   });
@@ -46,4 +43,4 @@ leaveRoomBtn.addEventListener("click", async () => {
   location.href = "lobby.html";
 });
 
-loadRoom();
+
