@@ -322,6 +322,20 @@ onSnapshot(collection(db, "rooms", roomCode, "status"), (snapshot) => {
         <span>${data.focusPercent || 0}%</span>
       </div>
     `;
+
+    const remote = remoteVideos[data.nickname];
+
+    if (remote && remote.doodleImg) {
+
+      if (data.status === "DROWSY") {
+        remote.doodleImg.style.display = "block";
+      } else {
+        remote.doodleImg.style.display = "none";
+      }
+
+    }
+
+
   });
 
   memberStatusList.innerHTML = html || "아직 상태 정보가 없어!";
@@ -354,7 +368,13 @@ function createRemoteVideoCard(otherName) {
   nameTag.className = "name-tag";
   nameTag.innerText = otherName;
 
+  const doodleImg = document.createElement("img");
+  doodleImg.src = "./doodle.png";
+  doodleImg.className = "remote-doodle";
+  doodleImg.style.display = "none";
+
   card.appendChild(video);
+  card.appendChild(doodleImg);
   card.appendChild(badge);
   card.appendChild(nameTag);
 
@@ -363,7 +383,8 @@ function createRemoteVideoCard(otherName) {
   remoteVideos[otherName] = {
     card,
     video,
-    badge
+    badge,
+    doodleImg
   };
 
   return remoteVideos[otherName];
