@@ -1,20 +1,38 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>스터디룸</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>CamStudy 대기실</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body>
 
-  <div class="container">
-    <h1 id="roomTitle"></h1>
-    <h2 id="memberList"></h2>
+<body class="room-page">
+  <div class="room-container">
+    <header class="room-header">
+      <h1>💜 CamStudy 대기실</h1>
+      <p>방 코드 : <span id="roomCodeText">-</span></p>
+    </header>
 
-    <button id="leaveRoomBtn">방 나가기</button>
+    <main class="room-main">
+      <section class="preview-card">
+        <h2>내 캠 확인</h2>
+        <video id="previewVideo" autoplay playsinline muted></video>
+        <p id="cameraStatus">카메라 준비중...</p>
+        <button id="startCamBtn">📷 캠 시작</button>
+      </section>
+
+      <section class="members-card">
+        <h2>참가자</h2>
+        <div id="memberList">불러오는 중...</div>
+      </section>
+    </main>
+
+    <footer class="room-footer">
+      <button id="startStudyBtn">🚀 캠스터디 시작</button>
+      <button id="leaveRoomBtn">🚪 나가기</button>
+    </footer>
   </div>
 
   <script type="module" src="room.js"></script>
-
 </body>
 </html>

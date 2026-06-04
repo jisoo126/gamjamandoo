@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>CamStudy 진행중</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="study-page">
+  <div class="study-layout">
+
+    <main class="study-main">
+      <header class="study-header">
+        <div>
+          <h1>💜 CamStudy</h1>
+          <p>방 코드 : <span id="roomCodeText">-</span></p>
+        </div>
+
+        <div class="timer-box">
+          <div id="studyTimer">00:00:00</div>
+          <p>공부 시간</p>
+        </div>
+
+        <button id="leaveStudyBtn">🚪 나가기</button>
+      </header>
+
+      <section id="videoGrid" class="video-grid">
+        <div class="video-card my-card" id="myVideoCard">
+          <video id="localVideo" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div class="status-badge" id="myStatusBadge">준비중</div>
+          <div class="name-tag" id="myNameTag">나</div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="side-panel">
+      <section class="panel-card">
+        <h2>👥 멤버 상태</h2>
+        <div id="memberStatusList">불러오는 중...</div>
+      </section>
+
+      <section class="panel-card">
+        <h2>🎯 내 집중도</h2>
+        <div class="big-number" id="focusPercent">0%</div>
+        <p id="statusText">상태 : 준비중</p>
+      </section>
+
+      <section class="panel-card">
+        <h2>📊 내 기록</h2>
+        <p>공부 시간 : <span id="studyTime">00:00:00</span></p>
+        <p>집중 시간 : <span id="focusTime">00:00:00</span></p>
+        <p>졸림 횟수 : <span id="drowsyCount">0회</span></p>
+        <p>EAR : <span id="earValue">0.00</span></p>
+      </section>
+    </aside>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script type="module" src="study.js"></script>
+</body>
+</html>
