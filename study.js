@@ -163,6 +163,23 @@ async function updateMyStatusInFirebase() {
   });
 }
 
+async function saveUserRecord() {
+  const userRef = doc(db, "users", nickname);
+
+  await setDoc(
+    userRef,
+    {
+      nickname,
+      studySeconds,
+      focusSeconds,
+      drowsyCount,
+      focusPercent: getFocusPercent(),
+      lastUpdated: Date.now()
+    },
+    { merge: true }
+  );
+}
+
 /* =========================
    졸음 감지
 ========================= */
@@ -540,8 +557,10 @@ function setupMemberWatcher() {
 ========================= */
 
 leaveStudyBtn.addEventListener("click", async () => {
-  unsubscribes.forEach((unsub) => unsub());
+  await saveUserRecord();
 
+  unsubscribes.forEach((unsub) => unsub());
+  
   Object.values(peerConnections).forEach((pc) => {
     pc.close();
   });
