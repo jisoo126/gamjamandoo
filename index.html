@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ait</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!--
+      @mediapipe/face_mesh는 정식 ES 모듈이 아니라서
+      import 문으로 불러오면 빌드/실행 에러가 납니다.
+      스크립트 태그로 불러와 전역(window.FaceMesh)으로 씁니다.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
