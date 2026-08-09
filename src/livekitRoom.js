@@ -26,6 +26,12 @@ let callbacks = {
   onDisconnected: () => {},
 };
 
+/*
+ * 데이터 채널로 보낼 때 사용하는 이벤트 이름입니다.
+ * 다른 종류의 데이터와 섞이지 않도록 구분합니다.
+ */
+const DROWSY_EVENT_TYPE = "drowsy-status";
+
 /* =========================
    LiveKit 방 입장
 ========================= */
@@ -420,6 +426,98 @@ function registerRoomEvents() {
       callbacks.onDisconnected();
     },
   );
+
+  /*
+   * 같은 방의 누군가가 졸음 신호를 보내면 여기로 도착합니다.
+   * (내가 보낸 신호는 여기로 안 돌아옵니다. 내 신호는
+   *  broadcastDrowsyStatus를 부르는 쪽에서 직접 처리해요.)
+   */
+  room.on(
+    RoomEvent.DataReceived,
+    (payload, participant) => {
+      let message;
+
+      try {
+        message = JSON.parse(
+          new TextDecoder().decode(
+            payload,
+          ),
+        );
+      } catch (error) {
+        return;
+      }
+
+      if (
+        message.type !==
+          DROWSY_EVENT_TYPE ||
+        !participant
+      ) {
+        return;
+      }
+
+      setParticipantDrowsyOverlay(
+        participant.identity,
+        message.isDrowsy,
+      );
+    },
+  );
+}
+
+/*
+ * 나의 졸음 상태를, 같은 방에 있는 모든 사람에게
+ * 실시간으로 알립니다. (earSocket.js가 AI 서버로부터
+ * 판정 결과를 받으면 이 함수를 호출해서 방송합니다)
+ */
+export function broadcastDrowsyStatus(
+  isDrowsy,
+) {
+  if (!room) {
+    return;
+  }
+
+  const payload =
+    new TextEncoder().encode(
+      JSON.stringify({
+        type: DROWSY_EVENT_TYPE,
+        isDrowsy,
+      }),
+    );
+
+  room.localParticipant
+    .publishData(payload, {
+      reliable: true,
+    });
+
+  /*
+   * 내 화면에도 똑같이 반영되도록,
+   * 나 자신에 대해서도 오버레이를 켜고 끕니다.
+   */
+  setParticipantDrowsyOverlay(
+    room.localParticipant.identity,
+    isDrowsy,
+  );
+}
+
+/*
+ * 참가자 카드 위에 알감자 캐릭터를 보여주거나 숨깁니다.
+ */
+function setParticipantDrowsyOverlay(
+  participantId,
+  isDrowsy,
+) {
+  const card =
+    document.querySelector(
+      `[data-participant-id="${participantId}"]`,
+    );
+
+  if (!card) {
+    return;
+  }
+
+  card.classList.toggle(
+    "is-drowsy",
+    Boolean(isDrowsy),
+  );
 }
 
 /* =========================
@@ -659,6 +757,39 @@ function createParticipantCard({
 
   videoContainer.appendChild(
     waitingText,
+  );
+
+  const mascotOverlay =
+    document.createElement(
+      "div",
+    );
+
+  mascotOverlay.className =
+    "algamja-mascot-overlay";
+
+  mascotOverlay.innerHTML = `
+    <div class="algamja-mascot">
+      <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <ellipse cx="60" cy="68" rx="42" ry="38" fill="#E8B96A" stroke="#B8823C" stroke-width="4"/>
+        <ellipse cx="38" cy="60" rx="5" ry="4" fill="#C99A52"/>
+        <ellipse cx="82" cy="72" rx="4" ry="3" fill="#C99A52"/>
+        <ellipse cx="55" cy="42" rx="3" ry="3" fill="#C99A52"/>
+        <circle cx="45" cy="62" r="6" fill="#3A2A1A"/>
+        <circle cx="75" cy="62" r="6" fill="#3A2A1A"/>
+        <circle cx="47" cy="60" r="2" fill="#fff"/>
+        <circle cx="77" cy="60" r="2" fill="#fff"/>
+        <path d="M46 80 Q60 92 74 80" stroke="#3A2A1A" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <ellipse cx="36" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
+        <ellipse cx="84" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
+      </svg>
+    </div>
+    <p class="algamja-mascot-text">
+      일어나요! 👋
+    </p>
+  `;
+
+  videoContainer.appendChild(
+    mascotOverlay,
   );
 
   const information =

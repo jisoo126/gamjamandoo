@@ -1,15 +1,8 @@
 /*
- * 백엔드 담당자가 실제 WebSocket 주소를 정하면
- * 이 한 줄만 바꾸면 됩니다.
- *
- * 기본값은 "지금 접속한 주소"를 그대로 씁니다.
- * (프론트를 켠 컴퓨터에서 EAR 서버도 같이 켤 경우 자동으로 맞음)
- * EAR 서버를 다른 컴퓨터에서 따로 켠다면, 아래 줄을
- * 그 컴퓨터의 IP로 직접 바꿔주세요.
- * 예: const EAR_SOCKET_URL = "ws://192.168.0.7:8001/ws/ear";
+ * 배포된 AI 서버(4번 주자 팀에서 전달) 주소입니다.
  */
 const EAR_SOCKET_URL =
-  `ws://${window.location.hostname}:8001/ws/ear`;
+  "wss://aigamja-brb6.onrender.com/ws/ear";
 
 /*
  * EAR 값을 너무 자주 보내면 서버 부담이 커질 수 있어서
@@ -25,6 +18,62 @@ let currentNickname = null;
 let currentRoomName = null;
 
 /*
+ * AI 모델이 요구하는 4개 변수(EAR, EAR_mean, EAR_std, EAR_diff)를
+ * 계산하기 위해, 최근 EAR 값들을 기억해둡니다.
+ * (1번 주자가 계산 순서를: EAR, EAR_mean, EAR_std, EAR_diff 로 확정)
+ */
+const EAR_HISTORY_SIZE = 30;
+let earHistory = [];
+
+function computeEarFeatures(ear) {
+  const previousEar =
+    earHistory.length > 0
+      ? earHistory[
+          earHistory.length - 1
+        ]
+      : ear;
+
+  earHistory.push(ear);
+
+  if (
+    earHistory.length >
+    EAR_HISTORY_SIZE
+  ) {
+    earHistory.shift();
+  }
+
+  const mean =
+    earHistory.reduce(
+      (sum, value) =>
+        sum + value,
+      0,
+    ) / earHistory.length;
+
+  const variance =
+    earHistory.reduce(
+      (sum, value) =>
+        sum +
+        (value - mean) ** 2,
+      0,
+    ) / earHistory.length;
+
+  const std = Math.sqrt(variance);
+  const diff = ear - previousEar;
+
+  return { mean, std, diff };
+}
+
+/*
+ * AI 서버가 아직 없을 때 무한정 재연결을 시도하면
+ * 화면 상태가 계속 깜빡여서 보기 불편합니다.
+ * 몇 번만 시도하고, 그 다음엔 조용히 멈춥니다.
+ * (3번 팀원이 서버를 완성하면, 방을 나갔다 다시
+ *  들어오는 것만으로 자동으로 다시 연결을 시도합니다)
+ */
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+/*
  * main.js에서 화면 요소를 직접 건드리지 않고,
  * 콜백 함수로 상태를 전달하기 위해 사용합니다.
  */
@@ -33,7 +82,33 @@ let callbacks = {
   onSendStatusChange: () => {},
   onEarChange: () => {},
   onFocusStatusChange: () => {},
+  /*
+   * 졸음 여부(true/false)가 바뀔 때마다 호출됩니다.
+   * main.js에서 이 값을 받아 livekitRoom.js의
+   * broadcastDrowsyStatus로 전달해서, 같은 방
+   * 사람들에게 알감자 캐릭터를 띄워줍니다.
+   */
+  onDrowsyChange: () => {},
 };
+
+/*
+ * 직전에 판정된 졸음 여부를 기억해뒀다가,
+ * 값이 실제로 바뀔 때만 onDrowsyChange를 호출합니다.
+ * (매번 같은 값을 반복해서 방송하지 않기 위해서예요)
+ */
+let lastKnownIsDrowsy = false;
+
+/*
+ * 백엔드가 보내는 status 값 중, "졸음"으로 볼 값들입니다.
+ */
+function isDrowsyStatus(status) {
+  return (
+    status === "drowsy" ||
+    status === "sleepy" ||
+    status === 1 ||
+    status === "1"
+  );
+}
 
 /*
  * 현재 로그인한 사용자와 방 이름을 저장합니다.
@@ -44,6 +119,18 @@ export function setEarContext({
 }) {
   currentNickname = nickname;
   currentRoomName = roomName;
+
+  /*
+   * 새로 방에 들어온 것이므로
+   * 재연결 시도 횟수를 초기화합니다.
+   */
+  reconnectAttempts = 0;
+
+  /*
+   * 이전 세션의 EAR 값이 평균/표준편차 계산에
+   * 섞이지 않도록 이력도 초기화합니다.
+   */
+  earHistory = [];
 }
 
 /*
@@ -101,6 +188,8 @@ export function connectEarSocket(
         "EAR WebSocket 연결 성공",
       );
 
+      reconnectAttempts = 0;
+
       callbacks.onSocketStatusChange(
         "AI 서버 연결됨",
       );
@@ -143,24 +232,46 @@ export function connectEarSocket(
 
       socket = null;
 
-      callbacks.onSocketStatusChange(
-        "AI 서버 연결 종료",
-      );
-
-      callbacks.onSendStatusChange(
-        "전송 중지",
-      );
-
       /*
-       * 아직 스터디 방에 있는 상태라면
-       * 3초 후 자동 재연결을 시도합니다.
+       * 재시도 횟수를 다 썼으면, 계속 깜빡이지 않도록
+       * 조용히 멈추고 고정된 메시지를 보여줍니다.
        */
-      if (currentRoomName) {
+      if (
+        currentRoomName &&
+        reconnectAttempts <
+          MAX_RECONNECT_ATTEMPTS
+      ) {
+        reconnectAttempts += 1;
+
+        callbacks.onSocketStatusChange(
+          "AI 서버 연결 종료",
+        );
+
+        callbacks.onSendStatusChange(
+          "전송 중지",
+        );
+
         reconnectTimer =
           setTimeout(() => {
             connectEarSocket();
           }, 3000);
+
+        return;
       }
+
+      if (currentRoomName) {
+        callbacks.onSocketStatusChange(
+          "AI 서버 대기 (아직 준비 안 됨)",
+        );
+      } else {
+        callbacks.onSocketStatusChange(
+          "AI 서버 연결 종료",
+        );
+      }
+
+      callbacks.onSendStatusChange(
+        "전송 중지",
+      );
     },
   );
 }
@@ -186,6 +297,12 @@ export function disconnectEarSocket() {
   callbacks.onSendStatusChange(
     "대기 중",
   );
+
+  if (lastKnownIsDrowsy) {
+    lastKnownIsDrowsy = false;
+
+    callbacks.onDrowsyChange(false);
+  }
 }
 
 /*
@@ -210,6 +327,13 @@ export function sendEarValue(ear) {
    * 화면에 현재 EAR 값을 바로 표시합니다.
    */
   callbacks.onEarChange(ear);
+
+  /*
+   * 전송 여부와 상관없이, 매 프레임마다
+   * 이력을 계속 쌓아야 평균/표준편차가 정확해집니다.
+   */
+  const features =
+    computeEarFeatures(ear);
 
   const now = Date.now();
 
@@ -236,8 +360,10 @@ export function sendEarValue(ear) {
     return;
   }
 
-  const payload =
-    buildEarPayload(ear);
+  const payload = buildEarPayload(
+    ear,
+    features,
+  );
 
   socket.send(
     JSON.stringify(payload),
@@ -251,18 +377,22 @@ export function sendEarValue(ear) {
 }
 
 /*
- * 백엔드로 보내는 JSON 형식입니다.
- *
- * 백엔드 담당자가 필드명을 다르게 정하면
- * 이 함수만 수정하면 됩니다.
+ * 백엔드로 보내는 형식입니다.
+ * 1번 주자가 알려준 순서: [EAR, EAR_mean, EAR_std, EAR_diff]
+ * 이 배열을 "features"라는 이름표를 붙여 객체로 감싸서 보냅니다.
+ * (백엔드 스펙: { "features": [...] })
  */
-function buildEarPayload(ear) {
+function buildEarPayload(
+  ear,
+  { mean, std, diff },
+) {
   return {
-    type: "ear",
-    nickname: currentNickname,
-    room_name: currentRoomName,
-    ear,
-    timestamp: Date.now(),
+    features: [
+      ear,
+      mean,
+      std,
+      diff,
+    ],
   };
 }
 
@@ -317,6 +447,22 @@ function handleServerMessage(
           result.status,
         ),
       );
+
+      const isDrowsy =
+        isDrowsyStatus(
+          result.status,
+        );
+
+      if (
+        isDrowsy !==
+        lastKnownIsDrowsy
+      ) {
+        lastKnownIsDrowsy = isDrowsy;
+
+        callbacks.onDrowsyChange(
+          isDrowsy,
+        );
+      }
     }
 
     callbacks.onSendStatusChange(

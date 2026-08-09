@@ -463,6 +463,22 @@ const appMarkup = `
 
     <!-- 실제 LiveKit 스터디 방 -->
     <section id="studyPage" class="study-page" hidden>
+      <div
+        id="drowsyAlert"
+        class="drowsy-alert"
+        hidden
+      >
+        <div class="drowsy-alert-card">
+          <span class="drowsy-alert-icon">⏰</span>
+          <p class="drowsy-alert-title">
+            졸음이 감지됐어요!
+          </p>
+          <p class="drowsy-alert-desc">
+            잠깐 일어나서 스트레칭 한번 어때요?
+          </p>
+        </div>
+      </div>
+
       <header class="study-header">
         <div>
           <p class="eyebrow">CamStudy Room</p>
@@ -639,6 +655,7 @@ export function renderApp() {
 
     "connectionStatus",
     "earSocketStatus",
+    "drowsyAlert",
 
     "participantCount",
     "earValue",

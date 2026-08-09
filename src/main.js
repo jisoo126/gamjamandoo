@@ -29,6 +29,7 @@ import {
   joinLiveKitRoom,
   leaveLiveKitRoom,
   toggleCamera,
+  broadcastDrowsyStatus,
 } from "./livekitRoom.js";
 
 import {
@@ -68,6 +69,89 @@ let pendingRoom = null;
  * 기존 방 참여 화면
  */
 let previewPreviousPanel = "create";
+
+/*
+ * 졸음 경고음을 재생합니다.
+ * 음원 파일 없이, 브라우저 내장 Web Audio API로
+ * "삐-삐-" 소리를 직접 만들어서 재생합니다.
+ */
+let alertAudioContext = null;
+
+function playDrowsyAlertSound() {
+  try {
+    if (!alertAudioContext) {
+      alertAudioContext =
+        new (window.AudioContext ||
+          window
+            .webkitAudioContext)();
+    }
+
+    const context =
+      alertAudioContext;
+
+    const beepTimes = [0, 0.25];
+
+    beepTimes.forEach(
+      (startOffset) => {
+        const oscillator =
+          context.createOscillator();
+
+        const gainNode =
+          context.createGain();
+
+        oscillator.type =
+          "sine";
+
+        oscillator.frequency
+          .value = 880;
+
+        gainNode.gain.setValueAtTime(
+          0.0001,
+          context.currentTime +
+            startOffset,
+        );
+
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.25,
+          context.currentTime +
+            startOffset +
+            0.02,
+        );
+
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.0001,
+          context.currentTime +
+            startOffset +
+            0.18,
+        );
+
+        oscillator.connect(
+          gainNode,
+        );
+
+        gainNode.connect(
+          context.destination,
+        );
+
+        oscillator.start(
+          context.currentTime +
+            startOffset,
+        );
+
+        oscillator.stop(
+          context.currentTime +
+            startOffset +
+            0.2,
+        );
+      },
+    );
+  } catch (error) {
+    console.warn(
+      "경고음 재생 실패:",
+      error,
+    );
+  }
+}
 
 /* =========================
    화면 전환
@@ -1084,6 +1168,20 @@ async function enterStudyRoom({
           ui.focusStatus.textContent =
             status;
         },
+
+      onDrowsyChange:
+        (isDrowsy) => {
+          broadcastDrowsyStatus(
+            isDrowsy,
+          );
+
+          ui.drowsyAlert.hidden =
+            !isDrowsy;
+
+          if (isDrowsy) {
+            playDrowsyAlertSound();
+          }
+        },
     });
 
     pendingRoom = null;
@@ -1196,6 +1294,8 @@ function resetStudyScreen() {
 
   ui.earSendStatus.textContent =
     "대기 중";
+
+  ui.drowsyAlert.hidden = true;
 
   ui.cameraButton.textContent =
     "카메라 끄기";
