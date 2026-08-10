@@ -469,9 +469,12 @@ function handleServerMessage(
       }
     }
 
-    callbacks.onSendStatusChange(
-      "응답 수신",
-    );
+    /*
+     * "전송 중" ↔ "응답 수신"을 매번 빠르게 오가면
+     * 화면이 깜빡여서 시선을 뺏기니, 응답이 왔다고
+     * 굳이 문구를 바꾸지 않습니다.
+     * (연결 끊김/오류일 때만 문구가 바뀝니다)
+     */
   } catch (error) {
     console.error(
       "AI 서버 응답 처리 실패:",
@@ -481,10 +484,6 @@ function handleServerMessage(
     console.error(
       "원본 메시지:",
       rawMessage,
-    );
-
-    callbacks.onSendStatusChange(
-      "응답 오류",
     );
   }
 }
