@@ -427,6 +427,15 @@ function handleServerMessage(
     const parsed =
       JSON.parse(rawMessage);
 
+    /*
+     * 서버가 실제로 뭘 돌려주는지
+     * 콘솔에서 바로 확인할 수 있도록 로그를 남깁니다.
+     */
+    console.log(
+      "[AI 서버 응답]",
+      parsed,
+    );
+
     const result =
       parsePredictionResponse(
         parsed,
@@ -472,6 +481,11 @@ function handleServerMessage(
     console.error(
       "AI 서버 응답 처리 실패:",
       error,
+    );
+
+    console.error(
+      "원본 메시지:",
+      rawMessage,
     );
 
     callbacks.onSendStatusChange(
