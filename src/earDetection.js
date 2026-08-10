@@ -16,6 +16,15 @@ let activeVideoElement = null;
 let isProcessingFrame = false;
 
 /*
+ * 매 프레임(초당 60번)마다 분석 요청을 보내면,
+ * FaceMesh 모델이 처음 로딩되는 동안 요청이
+ * 계속 쌓여서 오히려 로딩이 끝나지 않는 것처럼
+ * 보일 수 있습니다. 초당 최대 10번으로 제한합니다.
+ */
+const DETECTION_INTERVAL_MS = 100;
+let lastDetectionAt = 0;
+
+/*
  * 1번 주자 원본:
  * 두 점 사이의 거리를 구하는 수학 함수
  */
@@ -275,22 +284,31 @@ export async function startEarDetection(
       !activeVideoElement.ended &&
       !isProcessingFrame
     ) {
-      isProcessingFrame =
-        true;
+      const now = Date.now();
 
-      try {
-        await faceMesh.send({
-          image:
-            activeVideoElement,
-        });
-      } catch (error) {
-        console.error(
-          "FaceMesh 프레임 분석 실패:",
-          error,
-        );
-      } finally {
+      if (
+        now - lastDetectionAt >=
+        DETECTION_INTERVAL_MS
+      ) {
+        lastDetectionAt = now;
+
         isProcessingFrame =
-          false;
+          true;
+
+        try {
+          await faceMesh.send({
+            image:
+              activeVideoElement,
+          });
+        } catch (error) {
+          console.error(
+            "FaceMesh 프레임 분석 실패:",
+            error,
+          );
+        } finally {
+          isProcessingFrame =
+            false;
+        }
       }
     }
 
