@@ -58,7 +58,9 @@ app.post("/signup", async (req, res) => {
     }
 
     const existingUser =
-      findUserByNickname(nickname);
+      await findUserByNickname(
+        nickname,
+      );
 
     if (existingUser) {
       return res.status(409).json({
@@ -69,7 +71,7 @@ app.post("/signup", async (req, res) => {
     const passwordHash =
       await bcrypt.hash(password, 10);
 
-    createUser({
+    await createUser({
       nickname,
       passwordHash,
     });
@@ -100,7 +102,10 @@ app.post("/login", async (req, res) => {
       });
     }
 
-    const user = findUserByNickname(nickname);
+    const user =
+      await findUserByNickname(
+        nickname,
+      );
 
     if (!user) {
       return res.status(401).json({

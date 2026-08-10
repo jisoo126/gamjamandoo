@@ -1,81 +1,86 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(
-  fileURLToPath(import.meta.url),
-);
+import admin from "firebase-admin";
 
 /*
- * 회원 정보를 저장하는 JSON 파일 경로입니다.
- * .gitignore에 반드시 추가해서 저장소에 올라가지 않게 하세요.
+ * Firebase 서비스 계정 키를 환경변수(base64로 인코딩된 값)에서
+ * 읽어와 초기화합니다.
+ *
+ * Render/로컬 .env에 FIREBASE_SERVICE_ACCOUNT_BASE64 값을
+ * 설정해야 합니다. (설정 방법은 별도 안내 참고)
  */
-const USERS_FILE = path.join(
-  __dirname,
-  "users.json",
-);
+function initializeFirebase() {
+  if (admin.apps.length > 0) {
+    return;
+  }
+
+  const base64Key =
+    process.env
+      .FIREBASE_SERVICE_ACCOUNT_BASE64;
+
+  if (!base64Key) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_BASE64 환경변수가 설정되지 않았습니다.",
+    );
+  }
+
+  const decoded = Buffer.from(
+    base64Key,
+    "base64",
+  ).toString("utf-8");
+
+  const serviceAccount =
+    JSON.parse(decoded);
+
+  admin.initializeApp({
+    credential:
+      admin.credential.cert(
+        serviceAccount,
+      ),
+  });
+}
+
+initializeFirebase();
+
+const db = admin.firestore();
 
 /*
- * 파일이 없으면 빈 배열로 시작합니다.
+ * "users" 컬렉션에, 닉네임을 문서 ID로 사용합니다.
+ * (닉네임 중복 가입이 자동으로 막히는 효과도 있습니다)
  */
-function readUsers() {
-  if (!fs.existsSync(USERS_FILE)) {
-    return [];
-  }
-
-  try {
-    const raw = fs.readFileSync(
-      USERS_FILE,
-      "utf-8",
-    );
-
-    return JSON.parse(raw);
-  } catch (error) {
-    console.error(
-      "users.json 읽기 실패:",
-      error,
-    );
-
-    return [];
-  }
-}
-
-function writeUsers(users) {
-  fs.writeFileSync(
-    USERS_FILE,
-    JSON.stringify(users, null, 2),
-    "utf-8",
-  );
-}
+const usersCollection =
+  db.collection("users");
 
 /*
  * 닉네임으로 회원을 찾습니다.
- * (비밀번호 해시가 포함된 원본 레코드를 반환하므로
- *  이 함수의 반환값을 그대로 프론트엔드에 보내면 안 됩니다.)
  */
-export function findUserByNickname(nickname) {
-  const users = readUsers();
+export async function findUserByNickname(
+  nickname,
+) {
+  const doc = await usersCollection
+    .doc(nickname)
+    .get();
 
-  return users.find(
-    (user) => user.nickname === nickname,
-  );
+  if (!doc.exists) {
+    return null;
+  }
+
+  return {
+    nickname,
+    ...doc.data(),
+  };
 }
 
 /*
  * 새 회원을 저장합니다.
  * passwordHash는 이미 bcrypt로 해시된 값이어야 합니다.
  */
-export function createUser({
+export async function createUser({
   nickname,
   passwordHash,
 }) {
-  const users = readUsers();
-
-  users.push({
-    nickname,
-    passwordHash,
-    createdAt: Date.now(),
-  });
-
-  writeUsers(users);
+  await usersCollection
+    .doc(nickname)
+    .set({
+      passwordHash,
+      createdAt: Date.now(),
+    });
 }
