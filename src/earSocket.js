@@ -379,21 +379,16 @@ export function sendEarValue(ear) {
 /*
  * 백엔드로 보내는 형식입니다.
  * 1번 주자가 알려준 순서: [EAR, EAR_mean, EAR_std, EAR_diff]
- * 이 배열을 "features"라는 이름표를 붙여 객체로 감싸서 보냅니다.
- * (백엔드 스펙: { "features": [...] })
+ *
+ * 서버가 실제로 요구하는 형식은 순수 배열입니다.
+ * ({"features": [...]}로 감싸면 서버가
+ *  "잘못된 데이터 형식" 에러를 돌려줍니다 - 확인됨)
  */
 function buildEarPayload(
   ear,
   { mean, std, diff },
 ) {
-  return {
-    features: [
-      ear,
-      mean,
-      std,
-      diff,
-    ],
-  };
+  return [ear, mean, std, diff];
 }
 
 /*
