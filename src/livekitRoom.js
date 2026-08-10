@@ -32,6 +32,16 @@ let callbacks = {
  */
 const DROWSY_EVENT_TYPE = "drowsy-status";
 
+/*
+ * 얼굴 위치도 데이터 채널로 보냅니다.
+ * 너무 자주 보내면 네트워크 부담이 크니
+ * 최대 초당 10번으로 제한합니다.
+ */
+const FACE_POSITION_EVENT_TYPE =
+  "face-position";
+const FACE_POSITION_INTERVAL_MS = 100;
+let lastFacePositionSentAt = 0;
+
 /* =========================
    LiveKit 방 입장
 ========================= */
@@ -448,6 +458,22 @@ function registerRoomEvents() {
       }
 
       if (
+        message.type ===
+        FACE_POSITION_EVENT_TYPE
+      ) {
+        setParticipantFacePosition(
+          participant.identity,
+          {
+            x: message.x,
+            y: message.y,
+          },
+          false,
+        );
+
+        return;
+      }
+
+      if (
         message.type !==
           DROWSY_EVENT_TYPE ||
         !participant
@@ -518,6 +544,100 @@ function setParticipantDrowsyOverlay(
     "is-drowsy",
     Boolean(isDrowsy),
   );
+}
+
+/*
+ * 나의 얼굴 위치(이마 기준점)를, 같은 방에 있는
+ * 모든 사람에게 실시간으로 알립니다.
+ * earDetection.js가 매 프레임 이 함수를 호출합니다.
+ */
+export function broadcastFacePosition(
+  position,
+) {
+  if (!room) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (
+    now - lastFacePositionSentAt <
+    FACE_POSITION_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastFacePositionSentAt = now;
+
+  const payload =
+    new TextEncoder().encode(
+      JSON.stringify({
+        type: FACE_POSITION_EVENT_TYPE,
+        x: position.x,
+        y: position.y,
+      }),
+    );
+
+  /*
+   * 위치 정보는 놓쳐도 큰 문제 없어서(다음 프레임에
+   * 또 오니까), 더 빠른 unreliable 채널로 보냅니다.
+   */
+  room.localParticipant
+    .publishData(payload, {
+      reliable: false,
+    });
+
+  setParticipantFacePosition(
+    room.localParticipant.identity,
+    position,
+    true,
+  );
+}
+
+/*
+ * window.sendFacePosition 훅을 연결합니다.
+ * (earDetection.js가 이 전역 함수를 호출해요)
+ */
+export function exposeFacePositionSender() {
+  window.sendFacePosition =
+    broadcastFacePosition;
+}
+
+/*
+ * 알감자 캐릭터를 실제 얼굴 위치로 옮깁니다.
+ * isLocalSelf가 true면, 내 화면에서 내 캠은
+ * 거울처럼 좌우반전(CSS)돼 보이기 때문에
+ * x좌표를 반대로 뒤집어줍니다.
+ */
+function setParticipantFacePosition(
+  participantId,
+  { x, y },
+  isLocalSelf,
+) {
+  const card =
+    document.querySelector(
+      `[data-participant-id="${participantId}"]`,
+    );
+
+  if (!card) {
+    return;
+  }
+
+  const mascotWrap =
+    card.querySelector(
+      ".algamja-mascot-wrap",
+    );
+
+  if (!mascotWrap) {
+    return;
+  }
+
+  const displayX = isLocalSelf
+    ? 1 - x
+    : x;
+
+  mascotWrap.style.left = `${displayX * 100}%`;
+  mascotWrap.style.top = `${y * 100}%`;
 }
 
 /* =========================
@@ -768,24 +888,26 @@ function createParticipantCard({
     "algamja-mascot-overlay";
 
   mascotOverlay.innerHTML = `
-    <div class="algamja-mascot">
-      <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <ellipse cx="60" cy="68" rx="42" ry="38" fill="#E8B96A" stroke="#B8823C" stroke-width="4"/>
-        <ellipse cx="38" cy="60" rx="5" ry="4" fill="#C99A52"/>
-        <ellipse cx="82" cy="72" rx="4" ry="3" fill="#C99A52"/>
-        <ellipse cx="55" cy="42" rx="3" ry="3" fill="#C99A52"/>
-        <circle cx="45" cy="62" r="6" fill="#3A2A1A"/>
-        <circle cx="75" cy="62" r="6" fill="#3A2A1A"/>
-        <circle cx="47" cy="60" r="2" fill="#fff"/>
-        <circle cx="77" cy="60" r="2" fill="#fff"/>
-        <path d="M46 80 Q60 92 74 80" stroke="#3A2A1A" stroke-width="4" fill="none" stroke-linecap="round"/>
-        <ellipse cx="36" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
-        <ellipse cx="84" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
-      </svg>
+    <div class="algamja-mascot-wrap">
+      <div class="algamja-mascot">
+        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <ellipse cx="60" cy="68" rx="42" ry="38" fill="#E8B96A" stroke="#B8823C" stroke-width="4"/>
+          <ellipse cx="38" cy="60" rx="5" ry="4" fill="#C99A52"/>
+          <ellipse cx="82" cy="72" rx="4" ry="3" fill="#C99A52"/>
+          <ellipse cx="55" cy="42" rx="3" ry="3" fill="#C99A52"/>
+          <circle cx="45" cy="62" r="6" fill="#3A2A1A"/>
+          <circle cx="75" cy="62" r="6" fill="#3A2A1A"/>
+          <circle cx="47" cy="60" r="2" fill="#fff"/>
+          <circle cx="77" cy="60" r="2" fill="#fff"/>
+          <path d="M46 80 Q60 92 74 80" stroke="#3A2A1A" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <ellipse cx="36" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
+          <ellipse cx="84" cy="74" rx="6" ry="4" fill="#F2A1A1" opacity="0.7"/>
+        </svg>
+      </div>
+      <p class="algamja-mascot-text">
+        일어나요! 👋
+      </p>
     </div>
-    <p class="algamja-mascot-text">
-      일어나요! 👋
-    </p>
   `;
 
   videoContainer.appendChild(

@@ -905,8 +905,9 @@ h3 {
     flex-direction: column;
     gap: 5px;
   }
+}
 
-  /* =========================
+/* =========================
    입장 준비 화면
 ========================= */
 
@@ -1300,18 +1301,11 @@ h3 {
   position: absolute;
   inset: 0;
   z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
 
-  background: rgba(10, 14, 24, 0.55);
-  backdrop-filter: blur(2px);
+  pointer-events: none;
 
   opacity: 0;
   visibility: hidden;
-  pointer-events: none;
 
   transition:
     opacity 0.2s ease,
@@ -1324,8 +1318,33 @@ h3 {
   visibility: visible;
 }
 
+/*
+ * earDetection.js가 보내주는 얼굴 좌표(%)를
+ * left/top으로 그대로 받아서 위치를 잡습니다.
+ * 기본값은 얼굴 좌표가 아직 안 왔을 때 대비한
+ * 화면 중앙-위쪽입니다.
+ */
+.algamja-mascot-wrap {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  transform: translate(
+    -50%,
+    -100%
+  );
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+
+  transition:
+    left 0.12s linear,
+    top 0.12s linear;
+}
+
 .algamja-mascot {
-  width: 25%;
+  width: 25vw;
   min-width: 56px;
   max-width: 96px;
   filter: drop-shadow(

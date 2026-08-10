@@ -510,6 +510,14 @@ const appMarkup = `
           </button>
 
           <button
+            id="microphoneButton"
+            class="secondary-button"
+            type="button"
+          >
+            마이크 끄기
+          </button>
+
+          <button
             id="leaveButton"
             class="danger-button"
             type="button"
@@ -648,6 +656,7 @@ export function renderApp() {
 
     "leaveButton",
     "cameraButton",
+    "microphoneButton",
 
     "roomTitle",
     "userDisplay",

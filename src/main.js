@@ -29,7 +29,9 @@ import {
   joinLiveKitRoom,
   leaveLiveKitRoom,
   toggleCamera,
+  toggleMicrophone,
   broadcastDrowsyStatus,
+  exposeFacePositionSender,
 } from "./livekitRoom.js";
 
 import {
@@ -1249,6 +1251,36 @@ ui.cameraButton.addEventListener(
   },
 );
 
+ui.microphoneButton.addEventListener(
+  "click",
+  async () => {
+    ui.microphoneButton.disabled =
+      true;
+
+    try {
+      const enabled =
+        await toggleMicrophone();
+
+      ui.microphoneButton.textContent =
+        enabled
+          ? "마이크 끄기"
+          : "마이크 켜기";
+    } catch (error) {
+      console.error(
+        "마이크 전환 실패:",
+        error,
+      );
+
+      alert(
+        "마이크 상태를 변경하지 못했습니다.",
+      );
+    } finally {
+      ui.microphoneButton.disabled =
+        false;
+    }
+  },
+);
+
 /* =========================
    실제 방 나가기
 ========================= */
@@ -1300,6 +1332,9 @@ function resetStudyScreen() {
   ui.cameraButton.textContent =
     "카메라 끄기";
 
+  ui.microphoneButton.textContent =
+    "마이크 끄기";
+
   document
     .querySelectorAll(
       "[data-audio-participant]",
@@ -1314,6 +1349,8 @@ function resetStudyScreen() {
 /* =========================
    EAR 전역 함수 공개
 ========================= */
+
+exposeFacePositionSender();
 
 exposeEarSender({
   onEarChange:

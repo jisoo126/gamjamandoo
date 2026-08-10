@@ -168,6 +168,26 @@ function createFaceMesh() {
       }
 
       /*
+       * 알감자 캐릭터가 얼굴 위치를 따라다니도록,
+       * 이마 중앙 지점(랜드마크 10번)을 좌표로 보냅니다.
+       * MediaPipe 랜드마크는 이미 0~1 사이로
+       * 정규화돼 있어서 그대로 %로 쓸 수 있습니다.
+       */
+      const foreheadPoint =
+        landmarks[10];
+
+      if (
+        foreheadPoint &&
+        typeof window.sendFacePosition ===
+          "function"
+      ) {
+        window.sendFacePosition({
+          x: foreheadPoint.x,
+          y: foreheadPoint.y,
+        });
+      }
+
+      /*
        * 다른 화면 코드에서도 상태를 확인할 수 있도록
        * 이벤트를 발생시킵니다.
        */
