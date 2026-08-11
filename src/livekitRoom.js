@@ -795,8 +795,30 @@ function attachVideoTrack({
       ".video-container",
     );
 
-  videoContainer.innerHTML =
-    "";
+  /*
+   * 예전엔 innerHTML = ""로 통째로 비웠는데,
+   * 그러면 그 안에 있던 상태 배지·알감자 마스코트
+   * 요소까지 같이 사라져버리는 버그가 있었습니다.
+   * 카메라 영상(video)과 "카메라 준비 중" 문구만
+   * 골라서 지우고, 나머지는 그대로 둡니다.
+   */
+  const oldVideoElement =
+    videoContainer.querySelector(
+      "video",
+    );
+
+  if (oldVideoElement) {
+    oldVideoElement.remove();
+  }
+
+  const oldWaitingText =
+    videoContainer.querySelector(
+      ".camera-off-text",
+    );
+
+  if (oldWaitingText) {
+    oldWaitingText.remove();
+  }
 
   const videoElement =
     track.attach();
@@ -1007,11 +1029,41 @@ function showCameraOffState(
       ".video-container",
     );
 
-  videoContainer.innerHTML = `
-    <p class="camera-off-text">
-      카메라가 꺼져 있습니다
-    </p>
-  `;
+  /*
+   * 여기서도 통째로 지우지 않고,
+   * video 요소만 없애고 "카메라 꺼짐" 문구를
+   * 새로 넣습니다. (배지·마스코트는 보존)
+   */
+  const oldVideoElement =
+    videoContainer.querySelector(
+      "video",
+    );
+
+  if (oldVideoElement) {
+    oldVideoElement.remove();
+  }
+
+  let cameraOffText =
+    videoContainer.querySelector(
+      ".camera-off-text",
+    );
+
+  if (!cameraOffText) {
+    cameraOffText =
+      document.createElement(
+        "p",
+      );
+
+    cameraOffText.className =
+      "camera-off-text";
+
+    videoContainer.appendChild(
+      cameraOffText,
+    );
+  }
+
+  cameraOffText.textContent =
+    "카메라가 꺼져 있습니다";
 }
 
 /* =========================
