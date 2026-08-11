@@ -25,7 +25,47 @@ let currentRoomName = null;
 const EAR_HISTORY_SIZE = 30;
 let earHistory = [];
 
+/*
+ * 기기마다(특히 웹캠 vs 휴대폰 카메라) EAR 절대값 자체가
+ * 다르게 나오는 문제를 보정하기 위해, 방에 처음 들어온
+ * 직후 몇 초 동안의 EAR 값을 "이 사람/이 기기의 정상 기준선"
+ * 으로 저장해둡니다. (그 몇 초 동안은 눈을 뜨고 있다고 가정)
+ *
+ * 이후에는 서버가 "졸림"이라고 응답해도, 실제로 이
+ * 기준선보다 충분히 낮아졌을 때만 진짜 졸음으로 인정합니다.
+ * → 기기 차이로 인한 오탐지를 프론트엔드에서 한 번 더 걸러냅니다.
+ */
+const BASELINE_SAMPLE_TARGET = 20;
+const BASELINE_DROP_THRESHOLD = 0.15;
+
+let baselineEar = null;
+let baselineSamples = [];
+let isBelowPersonalBaseline = false;
+
+function updateBaseline(ear) {
+  if (baselineEar !== null) {
+    return;
+  }
+
+  baselineSamples.push(ear);
+
+  if (
+    baselineSamples.length <
+    BASELINE_SAMPLE_TARGET
+  ) {
+    return;
+  }
+
+  baselineEar =
+    baselineSamples.reduce(
+      (sum, value) =>
+        sum + value,
+      0,
+    ) / baselineSamples.length;
+}
+
 function computeEarFeatures(ear) {
+  updateBaseline(ear);
   const previousEar =
     earHistory.length > 0
       ? earHistory[
@@ -59,6 +99,23 @@ function computeEarFeatures(ear) {
 
   const std = Math.sqrt(variance);
   const diff = ear - previousEar;
+
+  /*
+   * 기준선이 아직 없으면(막 입장한 직후) 안전하게
+   * "기준선 아래 아님"으로 둡니다 - 성급하게 졸음
+   * 경고가 뜨지 않도록요.
+   */
+  if (baselineEar) {
+    const relativeDrop =
+      (baselineEar - mean) /
+      baselineEar;
+
+    isBelowPersonalBaseline =
+      relativeDrop >=
+      BASELINE_DROP_THRESHOLD;
+  } else {
+    isBelowPersonalBaseline = false;
+  }
 
   return { mean, std, diff };
 }
@@ -147,6 +204,14 @@ export function setEarContext({
   consecutiveDrowsyCount = 0;
   consecutiveNormalCount = 0;
   lastKnownIsDrowsy = false;
+
+  /*
+   * 새로 입장한 것이므로 개인 기준선도
+   * 처음부터 다시 계산합니다.
+   */
+  baselineEar = null;
+  baselineSamples = [];
+  isBelowPersonalBaseline = false;
 }
 
 /*
@@ -468,10 +533,19 @@ function handleServerMessage(
         ),
       );
 
+      /*
+       * 서버가 "졸림"이라고 판단했어도,
+       * 이 사람/이 기기의 정상 기준선보다
+       * 실제로 충분히 떨어진 경우에만
+       * 진짜 졸음으로 인정합니다.
+       * (기기별 EAR 절대값 차이로 인한
+       *  오탐지를 한 번 더 걸러내기 위함)
+       */
       const rawIsDrowsy =
         isDrowsyStatus(
           result.status,
-        );
+        ) &&
+        isBelowPersonalBaseline;
 
       if (rawIsDrowsy) {
         consecutiveDrowsyCount += 1;
