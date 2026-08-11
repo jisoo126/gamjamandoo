@@ -42,6 +42,15 @@ let baselineEar = null;
 let baselineSamples = [];
 let isBelowPersonalBaseline = false;
 
+/*
+ * "보낼 때의 상태"와 "그 응답이 왔을 때의 상태"가
+ * 시간차 때문에 어긋나는 문제를 막기 위해,
+ * 전송한 순서대로 그 당시의 기준선 판정 결과를
+ * 큐에 저장해뒀다가, 응답이 도착하면 그 순서대로
+ * 꺼내서 사용합니다.
+ */
+let pendingBaselineChecks = [];
+
 function updateBaseline(ear) {
   if (baselineEar !== null) {
     return;
@@ -212,6 +221,7 @@ export function setEarContext({
   baselineEar = null;
   baselineSamples = [];
   isBelowPersonalBaseline = false;
+  pendingBaselineChecks = [];
 }
 
 /*
@@ -371,6 +381,8 @@ export function disconnectEarSocket() {
     socket = null;
   }
 
+  pendingBaselineChecks = [];
+
   callbacks.onSocketStatusChange(
     "AI 서버 대기",
   );
@@ -444,6 +456,14 @@ export function sendEarValue(ear) {
   const payload = buildEarPayload(
     ear,
     features,
+  );
+
+  /*
+   * 지금 이 값을 보내는 시점의 기준선 판정을
+   * 큐에 기록해둡니다. (응답이 오면 이 순서대로 꺼내씀)
+   */
+  pendingBaselineChecks.push(
+    isBelowPersonalBaseline,
   );
 
   socket.send(
@@ -540,12 +560,22 @@ function handleServerMessage(
        * 진짜 졸음으로 인정합니다.
        * (기기별 EAR 절대값 차이로 인한
        *  오탐지를 한 번 더 걸러내기 위함)
+       *
+       * "지금 이 순간"이 아니라, 이 응답이
+       * 어떤 요청에 대한 것인지 큐에서 꺼내
+       * 그때 당시의 판정을 사용합니다.
        */
+      const wasBelowBaselineAtSendTime =
+        pendingBaselineChecks.length >
+        0
+          ? pendingBaselineChecks.shift()
+          : isBelowPersonalBaseline;
+
       const rawIsDrowsy =
         isDrowsyStatus(
           result.status,
         ) &&
-        isBelowPersonalBaseline;
+        wasBelowBaselineAtSendTime;
 
       if (rawIsDrowsy) {
         consecutiveDrowsyCount += 1;
