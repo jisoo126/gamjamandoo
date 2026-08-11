@@ -30,50 +30,38 @@ let earHistory = [];
  * 다르게 나오는 문제를 보정하기 위해, 방에 처음 들어온
  * 직후 몇 초 동안의 EAR 값을 "이 사람/이 기기의 정상 기준선"
  * 으로 저장해둡니다. (그 몇 초 동안은 눈을 뜨고 있다고 가정)
- *
- * 이후에는 서버가 "졸림"이라고 응답해도, 실제로 이
- * 기준선보다 충분히 낮아졌을 때만 진짜 졸음으로 인정합니다.
- * → 기기 차이로 인한 오탐지를 프론트엔드에서 한 번 더 걸러냅니다.
  */
 const BASELINE_SAMPLE_TARGET = 20;
 
 /*
- * 핵심은 "몇 % 떨어졌는지"가 아니라
- * "변화(깜빡임)가 아예 멈췄는지"입니다.
- *
- * 공부하려고 고개를 숙이면 EAR 자체는 낮아지지만,
- * 그래도 계속 깜빡이는 한 값은 계속 오르내려요.
- * 진짜 졸 때는 눈을 계속 감고 있으니, 그 순간부터
- * 값이 "그대로 멈춰서" 더 이상 안 움직여요.
- *
- * 그래서 "얼마나 낮은지"는 느슨하게(대략 눈을 감았을
- * 가능성이 있는 정도로만) 확인하고, "얼마나 평평한지
- * (움직임이 없는지)"를 훨씬 더 엄격하게, 그리고
- * 주된 기준으로 봅니다.
+ * 기준선보다 이 비율만큼 떨어지면, "이 프레임은
+ * 눈이 감겨있다"고 봅니다. (realtime.py의
+ * `ear < 0.20`과 같은 역할이지만, 기기마다 다른
+ * 절대값 대신 각자의 기준선 대비 비율로 계산합니다)
  */
-const BASELINE_DROP_THRESHOLD = 0.3;
+const LOW_EAR_DROP_RATIO = 0.35;
 
 /*
- * 지금 변동폭(std)이 이 사람 평소 변동폭의
- * 이 비율보다 작아지면 "더 이상 안 움직인다
- * (평평하다)"고 봅니다. 이게 졸음 판단의
- * 핵심 기준입니다.
+ * "몇 % 떨어졌는지"보다 "그 상태가 계속 이어지는지"가
+ * 핵심입니다. realtime.py와 같은 원리지만, 시간을
+ * 더 넉넉하게 잡았습니다.
+ *
+ * 사람은 평소 3~5초에 한 번씩 자연스럽게 눈을
+ * 깜빡여요 (집중하면 더 뜸해지기도 해요). 즉,
+ * "눈이 낮은 수치로 유지되는 것처럼 보이는 구간"이
+ * 1~2초 정도는 그냥 깜빡임 사이 간격일 수도 있어요.
+ *
+ * 그래서 "6초 동안 단 한 번도 값이 회복되는(=깜빡이는)
+ * 순간이 없었는지"를 봅니다. 6초 안에 단 한 프레임이라도
+ * 값이 다시 올라오면(=깜빡이면) 바로 0으로 리셋되고,
+ * 6초를 꽉 채워 전혀 변화가 없어야만 진짜 졸음으로 인정합니다.
  */
-const FLAT_STD_RATIO = 0.35;
+const CONSECUTIVE_CLOSED_FRAMES_THRESHOLD = 60;
 
 let baselineEar = null;
-let baselineStd = null;
 let baselineSamples = [];
-let isBelowPersonalBaseline = false;
-
-/*
- * "보낼 때의 상태"와 "그 응답이 왔을 때의 상태"가
- * 시간차 때문에 어긋나는 문제를 막기 위해,
- * 전송한 순서대로 그 당시의 기준선 판정 결과를
- * 큐에 저장해뒀다가, 응답이 도착하면 그 순서대로
- * 꺼내서 사용합니다.
- */
-let pendingBaselineChecks = [];
+let consecutiveClosedFrames = 0;
+let isLocallySustainedClosed = false;
 
 function updateBaseline(ear) {
   if (baselineEar !== null) {
@@ -95,26 +83,6 @@ function updateBaseline(ear) {
         sum + value,
       0,
     ) / baselineSamples.length;
-
-  /*
-   * "평소에 얼마나 자연스럽게 눈을 깜빡이며
-   * 값이 오르락내리락하는지"도 같이 저장해둡니다.
-   * (아래를 보고 있어서 EAR 자체는 낮아도,
-   *  이 변동폭만큼은 계속 유지되면 "그냥 자세
-   *  때문"이지 "졸음"이 아니라고 구분하기 위함)
-   */
-  const baselineVariance =
-    baselineSamples.reduce(
-      (sum, value) =>
-        sum +
-        (value - baselineEar) **
-          2,
-      0,
-    ) / baselineSamples.length;
-
-  baselineStd = Math.sqrt(
-    baselineVariance,
-  );
 }
 
 function computeEarFeatures(ear) {
@@ -154,37 +122,33 @@ function computeEarFeatures(ear) {
   const diff = ear - previousEar;
 
   /*
-   * 기준선이 아직 없으면(막 입장한 직후) 안전하게
-   * "기준선 아래 아님"으로 둡니다 - 성급하게 졸음
-   * 경고가 뜨지 않도록요.
+   * 기준선이 아직 없으면(막 입장한 직후) 판단을 보류합니다.
    */
-  if (baselineEar && baselineStd) {
-    const relativeDrop =
-      (baselineEar - mean) /
-      baselineEar;
+  if (baselineEar) {
+    const lowCutoff =
+      baselineEar *
+      (1 - LOW_EAR_DROP_RATIO);
 
-    const isLow =
-      relativeDrop >=
-      BASELINE_DROP_THRESHOLD;
+    const isClosedThisFrame =
+      ear < lowCutoff;
 
-    /*
-     * 책상을 내려다보느라 EAR이 낮아진 것뿐이라면,
-     * 그래도 계속 깜빡이니까 std(변동폭)는 평소랑
-     * 비슷하게 유지돼요. 반대로 진짜 눈을 감고
-     * 있으면, 더 이상 깜빡이질 않으니 std가
-     * 확 줄어들어요(평평해짐).
-     *
-     * → "낮으면서 + 평평하기까지 해야" 진짜 졸음 후보로 봅니다.
-     */
-    const isFlat =
-      std <=
-      baselineStd *
-        FLAT_STD_RATIO;
+    if (isClosedThisFrame) {
+      consecutiveClosedFrames += 1;
+    } else {
+      /*
+       * 단 한 프레임이라도 눈을 뜨면(값이 다시
+       * 올라오면) 바로 리셋 - 이게 "눈 깜빡임은
+       * 걸러내고, 진짜 지속되는 감김만 잡는" 핵심입니다.
+       */
+      consecutiveClosedFrames = 0;
+    }
 
-    isBelowPersonalBaseline =
-      isLow && isFlat;
+    isLocallySustainedClosed =
+      consecutiveClosedFrames >=
+      CONSECUTIVE_CLOSED_FRAMES_THRESHOLD;
   } else {
-    isBelowPersonalBaseline = false;
+    consecutiveClosedFrames = 0;
+    isLocallySustainedClosed = false;
   }
 
   return { mean, std, diff };
@@ -226,19 +190,6 @@ let callbacks = {
 let lastKnownIsDrowsy = false;
 
 /*
- * "평평함(std)" 판단 자체가 이미 최근 3초 구간
- * (earHistory 30개, 0.1초 간격)을 보고 계산되기
- * 때문에, "그 위에 또 몇 초를 기다린다"는 조건을
- * 겹쳐 넣으면 지나치게 둔감해져요.
- *
- * 여기서는 카메라 인식 노이즈로 인한 단일 프레임
- * 오작동만 걸러낼 정도로 짧게(0.5초) 둡니다.
- */
-const DROWSY_CONFIRM_DURATION_MS = 500;
-let drowsyStreakStartedAt = null;
-let normalStreakStartedAt = null;
-
-/*
  * 백엔드가 보내는 status 값 중, "졸음"으로 볼 값들입니다.
  */
 function isDrowsyStatus(status) {
@@ -272,8 +223,6 @@ export function setEarContext({
    */
   earHistory = [];
 
-  drowsyStreakStartedAt = null;
-  normalStreakStartedAt = null;
   lastKnownIsDrowsy = false;
 
   /*
@@ -281,10 +230,9 @@ export function setEarContext({
    * 처음부터 다시 계산합니다.
    */
   baselineEar = null;
-  baselineStd = null;
   baselineSamples = [];
-  isBelowPersonalBaseline = false;
-  pendingBaselineChecks = [];
+  consecutiveClosedFrames = 0;
+  isLocallySustainedClosed = false;
 }
 
 /*
@@ -444,8 +392,6 @@ export function disconnectEarSocket() {
     socket = null;
   }
 
-  pendingBaselineChecks = [];
-
   callbacks.onSocketStatusChange(
     "AI 서버 대기",
   );
@@ -487,9 +433,30 @@ export function sendEarValue(ear) {
   /*
    * 전송 여부와 상관없이, 매 프레임마다
    * 이력을 계속 쌓아야 평균/표준편차가 정확해집니다.
+   * (이 안에서 "몇 프레임 연속으로 감겼는지"도
+   *  같이 계산됩니다)
    */
   const features =
     computeEarFeatures(ear);
+
+  /*
+   * 서버 응답을 기다리지 않고, 지금 이 순간
+   * 로컬에서 계산한 결과로 바로 졸음 여부를
+   * 판단합니다. (네트워크 지연/타이밍 어긋남 문제를
+   * 원천적으로 없애기 위해, realtime.py와 똑같이
+   * 프론트엔드에서 직접 판단합니다)
+   */
+  if (
+    isLocallySustainedClosed !==
+    lastKnownIsDrowsy
+  ) {
+    lastKnownIsDrowsy =
+      isLocallySustainedClosed;
+
+    callbacks.onDrowsyChange(
+      isLocallySustainedClosed,
+    );
+  }
 
   const now = Date.now();
 
@@ -519,14 +486,6 @@ export function sendEarValue(ear) {
   const payload = buildEarPayload(
     ear,
     features,
-  );
-
-  /*
-   * 지금 이 값을 보내는 시점의 기준선 판정을
-   * 큐에 기록해둡니다. (응답이 오면 이 순서대로 꺼내씀)
-   */
-  pendingBaselineChecks.push(
-    isBelowPersonalBaseline,
   );
 
   socket.send(
@@ -617,81 +576,12 @@ function handleServerMessage(
       );
 
       /*
-       * 서버가 "졸림"이라고 판단했어도,
-       * 이 사람/이 기기의 정상 기준선보다
-       * 실제로 충분히 떨어진 경우에만
-       * 진짜 졸음으로 인정합니다.
-       * (기기별 EAR 절대값 차이로 인한
-       *  오탐지를 한 번 더 걸러내기 위함)
-       *
-       * "지금 이 순간"이 아니라, 이 응답이
-       * 어떤 요청에 대한 것인지 큐에서 꺼내
-       * 그때 당시의 판정을 사용합니다.
+       * 실제 졸음 감지(경고/알감자 등)는
+       * 이미 sendEarValue에서 로컬로
+       * 판단해서 처리했습니다. 여기 서버
+       * 응답은 "AI 판정 결과"를 화면에
+       * 참고용으로 보여주는 용도로만 씁니다.
        */
-      const wasBelowBaselineAtSendTime =
-        pendingBaselineChecks.length >
-        0
-          ? pendingBaselineChecks.shift()
-          : isBelowPersonalBaseline;
-
-      const rawIsDrowsy =
-        isDrowsyStatus(
-          result.status,
-        ) &&
-        wasBelowBaselineAtSendTime;
-
-      const now = Date.now();
-
-      if (rawIsDrowsy) {
-        if (!drowsyStreakStartedAt) {
-          drowsyStreakStartedAt =
-            now;
-        }
-
-        normalStreakStartedAt =
-          null;
-      } else {
-        if (!normalStreakStartedAt) {
-          normalStreakStartedAt =
-            now;
-        }
-
-        drowsyStreakStartedAt =
-          null;
-      }
-
-      const drowsyStreakDuration =
-        drowsyStreakStartedAt
-          ? now -
-            drowsyStreakStartedAt
-          : 0;
-
-      const normalStreakDuration =
-        normalStreakStartedAt
-          ? now -
-            normalStreakStartedAt
-          : 0;
-
-      const confirmedIsDrowsy =
-        drowsyStreakDuration >=
-        DROWSY_CONFIRM_DURATION_MS
-          ? true
-          : normalStreakDuration >=
-              DROWSY_CONFIRM_DURATION_MS
-            ? false
-            : lastKnownIsDrowsy;
-
-      if (
-        confirmedIsDrowsy !==
-        lastKnownIsDrowsy
-      ) {
-        lastKnownIsDrowsy =
-          confirmedIsDrowsy;
-
-        callbacks.onDrowsyChange(
-          confirmedIsDrowsy,
-        );
-      }
     }
 
     /*
