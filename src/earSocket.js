@@ -36,14 +36,25 @@ let earHistory = [];
  * → 기기 차이로 인한 오탐지를 프론트엔드에서 한 번 더 걸러냅니다.
  */
 const BASELINE_SAMPLE_TARGET = 20;
-const BASELINE_DROP_THRESHOLD = 0.15;
+
+/*
+ * 실측 데이터 기준으로 정한 값입니다:
+ * - 평소(눈 뜸): 기준선 그대로
+ * - 눈 깜빡이는 순간: 기준선 대비 약 46% 하락
+ * - 진짜 졸 때: 기준선 대비 약 65% 하락
+ *
+ * 46%와 65% 사이, 안전 마진을 두고 55%로 잡았습니다.
+ * (이전엔 15%로 너무 낮게 잡아서, 눈 깜빡임도
+ *  전부 "낮음"으로 걸려버리는 문제가 있었습니다)
+ */
+const BASELINE_DROP_THRESHOLD = 0.55;
 
 /*
  * 지금 변동폭(std)이, 이 사람 평소 변동폭의
  * 몇 %보다 작아지면 "더 이상 안 깜빡이고
  * 눈이 그대로 감겨있다(평평하다)"고 볼지 정합니다.
  */
-const FLAT_STD_RATIO = 0.45;
+const FLAT_STD_RATIO = 0.5;
 
 let baselineEar = null;
 let baselineStd = null;
