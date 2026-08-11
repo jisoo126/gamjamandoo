@@ -99,6 +99,18 @@ let callbacks = {
 let lastKnownIsDrowsy = false;
 
 /*
+ * 눈 깜빡임 한 번에 "졸림"으로 반응하면
+ * 화면이 계속 깜빡여서 오히려 정신 사나워요.
+ * "졸림" 판정이 연속으로 3번 이상 나와야만
+ * 진짜 졸린 것으로 인정합니다.
+ * (0.1초 간격 분석 기준, 대략 0.3~0.5초 이상
+ *  지속된 경우만 반응)
+ */
+const DROWSY_CONFIRM_COUNT = 3;
+let consecutiveDrowsyCount = 0;
+let consecutiveNormalCount = 0;
+
+/*
  * 백엔드가 보내는 status 값 중, "졸음"으로 볼 값들입니다.
  */
 function isDrowsyStatus(status) {
@@ -131,6 +143,10 @@ export function setEarContext({
    * 섞이지 않도록 이력도 초기화합니다.
    */
   earHistory = [];
+
+  consecutiveDrowsyCount = 0;
+  consecutiveNormalCount = 0;
+  lastKnownIsDrowsy = false;
 }
 
 /*
@@ -452,19 +468,37 @@ function handleServerMessage(
         ),
       );
 
-      const isDrowsy =
+      const rawIsDrowsy =
         isDrowsyStatus(
           result.status,
         );
 
+      if (rawIsDrowsy) {
+        consecutiveDrowsyCount += 1;
+        consecutiveNormalCount = 0;
+      } else {
+        consecutiveNormalCount += 1;
+        consecutiveDrowsyCount = 0;
+      }
+
+      const confirmedIsDrowsy =
+        consecutiveDrowsyCount >=
+        DROWSY_CONFIRM_COUNT
+          ? true
+          : consecutiveNormalCount >=
+              DROWSY_CONFIRM_COUNT
+            ? false
+            : lastKnownIsDrowsy;
+
       if (
-        isDrowsy !==
+        confirmedIsDrowsy !==
         lastKnownIsDrowsy
       ) {
-        lastKnownIsDrowsy = isDrowsy;
+        lastKnownIsDrowsy =
+          confirmedIsDrowsy;
 
         callbacks.onDrowsyChange(
-          isDrowsy,
+          confirmedIsDrowsy,
         );
       }
     }
