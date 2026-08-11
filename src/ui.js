@@ -4,7 +4,7 @@ const appMarkup = `
     <section id="loginPage" class="center-page">
       <div class="auth-card">
         <p class="eyebrow">AI 집중 스터디</p>
-        <h1>CamStudy</h1>
+        <h1>AlGAMJA</h1>
 
         <p class="description">
           로그인하고 함께 집중하는 스터디를 시작하세요.
@@ -55,7 +55,7 @@ const appMarkup = `
     <!-- 회원가입 화면 -->
     <section id="signupPage" class="center-page" hidden>
       <div class="auth-card">
-        <p class="eyebrow">CamStudy 시작하기</p>
+        <p class="eyebrow">AlGAMJA 시작하기</p>
         <h1>회원가입</h1>
 
         <p class="description">
@@ -479,11 +479,96 @@ const appMarkup = `
         </div>
       </div>
 
+      <aside
+        id="statsPanel"
+        class="stats-panel"
+      >
+        <div class="stats-panel-header">
+          <strong>나의 집중도</strong>
+          <button
+            id="statsCloseButton"
+            class="stats-close-button"
+            type="button"
+            aria-label="집중도 패널 닫기"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="stats-row">
+          <span class="stats-label">
+            공부 시간
+          </span>
+          <span
+            id="statsTotalTime"
+            class="stats-value"
+          >
+            00:00
+          </span>
+        </div>
+
+        <div class="stats-row">
+          <span class="stats-label">
+            집중(순공) 시간
+          </span>
+          <span
+            id="statsFocusedTime"
+            class="stats-value"
+          >
+            00:00
+          </span>
+        </div>
+
+        <div class="stats-row">
+          <span class="stats-label">
+            졸음 감지 횟수
+          </span>
+          <span
+            id="statsDrowsyCount"
+            class="stats-value"
+          >
+            0회
+          </span>
+        </div>
+
+        <div class="stats-focus-gauge">
+          <div class="stats-focus-ring">
+            <svg viewBox="0 0 100 100">
+              <circle
+                class="stats-focus-ring-bg"
+                cx="50"
+                cy="50"
+                r="42"
+              />
+              <circle
+                id="statsFocusRingBar"
+                class="stats-focus-ring-bar"
+                cx="50"
+                cy="50"
+                r="42"
+              />
+            </svg>
+            <span
+              id="statsFocusPercent"
+              class="stats-focus-percent"
+            >
+              0%
+            </span>
+          </div>
+          <p class="stats-focus-caption">
+            전체 집중도
+          </p>
+        </div>
+      </aside>
+
       <header class="study-header">
         <div>
-          <p class="eyebrow">CamStudy Room</p>
+          <p class="eyebrow">AlGAMJA Room</p>
           <h2 id="roomTitle">스터디 방</h2>
           <p id="userDisplay" class="header-user"></p>
+          <p id="studyTimer" class="study-timer">
+            00:00
+          </p>
         </div>
 
         <div class="header-actions">
@@ -515,6 +600,14 @@ const appMarkup = `
             type="button"
           >
             마이크 끄기
+          </button>
+
+          <button
+            id="statsToggleButton"
+            class="secondary-button"
+            type="button"
+          >
+            📊 집중도
           </button>
 
           <button
@@ -660,11 +753,21 @@ export function renderApp() {
 
     "roomTitle",
     "userDisplay",
+    "studyTimer",
     "videoGrid",
 
     "connectionStatus",
     "earSocketStatus",
     "drowsyAlert",
+
+    "statsToggleButton",
+    "statsCloseButton",
+    "statsPanel",
+    "statsTotalTime",
+    "statsFocusedTime",
+    "statsDrowsyCount",
+    "statsFocusRingBar",
+    "statsFocusPercent",
 
     "participantCount",
     "earValue",

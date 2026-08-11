@@ -73,6 +73,168 @@ let pendingRoom = null;
 let previewPreviousPanel = "create";
 
 /*
+ * 스터디 방에 머문 시간 + 집중(순공) 시간 +
+ * 졸음 감지 횟수를 기록합니다.
+ */
+let studyTimerIntervalId = null;
+let studyStartedAt = null;
+let focusedSeconds = 0;
+let drowsyEventCount = 0;
+let isSelfCurrentlyDrowsy = false;
+
+function startStudyTimer() {
+  studyStartedAt = Date.now();
+  focusedSeconds = 0;
+  drowsyEventCount = 0;
+  isSelfCurrentlyDrowsy = false;
+
+  updateStudyTimerDisplay();
+
+  studyTimerIntervalId =
+    setInterval(() => {
+      /*
+       * 지금 안 졸린 상태일 때만
+       * "집중 시간"을 1초씩 더합니다.
+       */
+      if (
+        !isSelfCurrentlyDrowsy
+      ) {
+        focusedSeconds += 1;
+      }
+
+      updateStudyTimerDisplay();
+    }, 1000);
+}
+
+function stopStudyTimer() {
+  if (studyTimerIntervalId) {
+    clearInterval(
+      studyTimerIntervalId,
+    );
+
+    studyTimerIntervalId = null;
+  }
+
+  studyStartedAt = null;
+  focusedSeconds = 0;
+  drowsyEventCount = 0;
+  isSelfCurrentlyDrowsy = false;
+
+  ui.studyTimer.textContent =
+    "00:00";
+
+  ui.statsTotalTime.textContent =
+    "00:00";
+
+  ui.statsFocusedTime.textContent =
+    "00:00";
+
+  ui.statsDrowsyCount.textContent =
+    "0회";
+
+  setFocusRing(0);
+}
+
+/*
+ * earSocket.js의 onDrowsyChange에서 호출됩니다.
+ * 졸음이 "새로 시작될 때"만 횟수를 1 늘립니다.
+ */
+function recordSelfDrowsyChange(
+  isDrowsy,
+) {
+  if (
+    isDrowsy &&
+    !isSelfCurrentlyDrowsy
+  ) {
+    drowsyEventCount += 1;
+  }
+
+  isSelfCurrentlyDrowsy =
+    isDrowsy;
+}
+
+function formatDuration(
+  totalSeconds,
+) {
+  const hours = Math.floor(
+    totalSeconds / 3600,
+  );
+
+  const minutes = Math.floor(
+    (totalSeconds % 3600) / 60,
+  );
+
+  const seconds =
+    totalSeconds % 60;
+
+  const pad = (value) =>
+    String(value).padStart(
+      2,
+      "0",
+    );
+
+  return hours > 0
+    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(minutes)}:${pad(seconds)}`;
+}
+
+function setFocusRing(percent) {
+  const circumference = 264;
+
+  const offset =
+    circumference -
+    (circumference * percent) /
+      100;
+
+  ui.statsFocusRingBar.style.strokeDashoffset =
+    offset;
+
+  ui.statsFocusPercent.textContent = `${percent}%`;
+}
+
+function updateStudyTimerDisplay() {
+  if (!studyStartedAt) {
+    return;
+  }
+
+  const elapsedSeconds =
+    Math.floor(
+      (Date.now() -
+        studyStartedAt) /
+        1000,
+    );
+
+  const timeText =
+    formatDuration(
+      elapsedSeconds,
+    );
+
+  ui.studyTimer.textContent =
+    timeText;
+
+  ui.statsTotalTime.textContent =
+    timeText;
+
+  ui.statsFocusedTime.textContent =
+    formatDuration(
+      focusedSeconds,
+    );
+
+  ui.statsDrowsyCount.textContent = `${drowsyEventCount}회`;
+
+  const focusPercent =
+    elapsedSeconds > 0
+      ? Math.round(
+          (focusedSeconds /
+            elapsedSeconds) *
+            100,
+        )
+      : 0;
+
+  setFocusRing(focusPercent);
+}
+
+/*
  * 졸음 경고음을 재생합니다.
  * 음원 파일 없이, 브라우저 내장 Web Audio API로
  * "삐-삐-" 소리를 직접 만들어서 재생합니다.
@@ -1076,6 +1238,8 @@ async function enterStudyRoom({
     roomTitle,
   });
 
+  startStudyTimer();
+
   try {
     await joinLiveKitRoom({
       roomName:
@@ -1173,6 +1337,10 @@ async function enterStudyRoom({
 
       onDrowsyChange:
         (isDrowsy) => {
+          recordSelfDrowsyChange(
+            isDrowsy,
+          );
+
           broadcastDrowsyStatus(
             isDrowsy,
           );
@@ -1282,6 +1450,28 @@ ui.microphoneButton.addEventListener(
 );
 
 /* =========================
+   집중도 패널 열기/닫기
+========================= */
+
+ui.statsToggleButton.addEventListener(
+  "click",
+  () => {
+    ui.statsPanel.classList.toggle(
+      "is-open",
+    );
+  },
+);
+
+ui.statsCloseButton.addEventListener(
+  "click",
+  () => {
+    ui.statsPanel.classList.remove(
+      "is-open",
+    );
+  },
+);
+
+/* =========================
    실제 방 나가기
 ========================= */
 
@@ -1307,6 +1497,12 @@ ui.leaveButton.addEventListener(
 ========================= */
 
 function resetStudyScreen() {
+  stopStudyTimer();
+
+  ui.statsPanel.classList.remove(
+    "is-open",
+  );
+
   ui.videoGrid.innerHTML = "";
 
   ui.participantCount.textContent =

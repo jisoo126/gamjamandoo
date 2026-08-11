@@ -666,6 +666,15 @@ h3 {
   font-size: 13px;
 }
 
+.study-timer {
+  margin: 4px 0 0;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric:
+    tabular-nums;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -716,6 +725,52 @@ h3 {
   background:
     var(--bg-card);
   box-shadow: var(--shadow-card);
+
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+/*
+ * 졸음 감지 시, 나/남 화면 상관없이
+ * 카드 테두리가 빨갛게 물들며 은은하게
+ * 깜빡여서 한눈에 "누가 졸고 있는지" 보이게 합니다.
+ */
+.participant-card.is-drowsy {
+  border-color: #ff5c5c;
+  box-shadow:
+    0 0 0 2px
+      rgba(255, 92, 92, 0.5),
+    0 0 24px
+      rgba(255, 92, 92, 0.35);
+
+  animation:
+    drowsy-card-glow 1.4s
+      ease-in-out infinite;
+}
+
+@keyframes drowsy-card-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px
+        rgba(255, 92, 92, 0.5),
+      0 0 24px
+        rgba(255, 92, 92, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px
+        rgba(255, 92, 92, 0.75),
+      0 0 34px
+        rgba(255, 92, 92, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .participant-card.is-drowsy {
+    animation: none;
+  }
 }
 
 .video-container {
@@ -1291,6 +1346,174 @@ h3 {
   .preview-code-row {
     justify-content: flex-start;
   }
+}
+
+/* =========================
+   수납형 집중도 패널
+========================= */
+
+.stats-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+
+  width: 300px;
+  max-width: 86vw;
+  padding: 24px 20px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  background: var(--bg-card-strong);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-large);
+
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+
+.stats-panel.is-open {
+  transform: translateX(0);
+}
+
+.stats-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  color: var(--text-main);
+  font-size: 15px;
+}
+
+.stats-close-button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+
+  color: var(--text-soft);
+  background: var(--bg-soft);
+  cursor: pointer;
+}
+
+.stats-close-button:hover {
+  color: var(--text-main);
+}
+
+.stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stats-label {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.stats-value {
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-focus-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.stats-focus-ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.stats-focus-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.stats-focus-ring-bg {
+  fill: none;
+  stroke: var(--bg-soft);
+  stroke-width: 9;
+}
+
+.stats-focus-ring-bar {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 9;
+  stroke-linecap: round;
+
+  stroke-dasharray: 264;
+  stroke-dashoffset: 264;
+
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.stats-focus-percent {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: var(--text-main);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.stats-focus-caption {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .stats-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* =========================
+   상태 배지 (정상/졸림)
+========================= */
+
+.status-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+
+  padding: 4px 10px;
+  border-radius: 999px;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  color: #0f2417;
+  background: #52d59a;
+
+  box-shadow: var(--shadow-large);
+
+  transition: background 0.2s ease;
+}
+
+.status-badge-drowsy {
+  color: #2b0e10;
+  background: #ff8080;
 }
 
 /* =========================

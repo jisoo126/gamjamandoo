@@ -544,6 +544,22 @@ function setParticipantDrowsyOverlay(
     "is-drowsy",
     Boolean(isDrowsy),
   );
+
+  const badge =
+    card.querySelector(
+      ".status-badge",
+    );
+
+  if (badge) {
+    badge.classList.toggle(
+      "status-badge-drowsy",
+      Boolean(isDrowsy),
+    );
+
+    badge.textContent = isDrowsy
+      ? "😪 졸림"
+      : "😊 정상";
+  }
 }
 
 /*
@@ -877,6 +893,21 @@ function createParticipantCard({
 
   videoContainer.appendChild(
     waitingText,
+  );
+
+  const statusBadge =
+    document.createElement(
+      "span",
+    );
+
+  statusBadge.className =
+    "status-badge";
+
+  statusBadge.textContent =
+    "😊 정상";
+
+  videoContainer.appendChild(
+    statusBadge,
   );
 
   const mascotOverlay =
