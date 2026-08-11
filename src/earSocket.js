@@ -38,7 +38,15 @@ let earHistory = [];
 const BASELINE_SAMPLE_TARGET = 20;
 const BASELINE_DROP_THRESHOLD = 0.15;
 
+/*
+ * 지금 변동폭(std)이, 이 사람 평소 변동폭의
+ * 몇 %보다 작아지면 "더 이상 안 깜빡이고
+ * 눈이 그대로 감겨있다(평평하다)"고 볼지 정합니다.
+ */
+const FLAT_STD_RATIO = 0.45;
+
 let baselineEar = null;
+let baselineStd = null;
 let baselineSamples = [];
 let isBelowPersonalBaseline = false;
 
@@ -71,6 +79,26 @@ function updateBaseline(ear) {
         sum + value,
       0,
     ) / baselineSamples.length;
+
+  /*
+   * "평소에 얼마나 자연스럽게 눈을 깜빡이며
+   * 값이 오르락내리락하는지"도 같이 저장해둡니다.
+   * (아래를 보고 있어서 EAR 자체는 낮아도,
+   *  이 변동폭만큼은 계속 유지되면 "그냥 자세
+   *  때문"이지 "졸음"이 아니라고 구분하기 위함)
+   */
+  const baselineVariance =
+    baselineSamples.reduce(
+      (sum, value) =>
+        sum +
+        (value - baselineEar) **
+          2,
+      0,
+    ) / baselineSamples.length;
+
+  baselineStd = Math.sqrt(
+    baselineVariance,
+  );
 }
 
 function computeEarFeatures(ear) {
@@ -114,14 +142,31 @@ function computeEarFeatures(ear) {
    * "기준선 아래 아님"으로 둡니다 - 성급하게 졸음
    * 경고가 뜨지 않도록요.
    */
-  if (baselineEar) {
+  if (baselineEar && baselineStd) {
     const relativeDrop =
       (baselineEar - mean) /
       baselineEar;
 
-    isBelowPersonalBaseline =
+    const isLow =
       relativeDrop >=
       BASELINE_DROP_THRESHOLD;
+
+    /*
+     * 책상을 내려다보느라 EAR이 낮아진 것뿐이라면,
+     * 그래도 계속 깜빡이니까 std(변동폭)는 평소랑
+     * 비슷하게 유지돼요. 반대로 진짜 눈을 감고
+     * 있으면, 더 이상 깜빡이질 않으니 std가
+     * 확 줄어들어요(평평해짐).
+     *
+     * → "낮으면서 + 평평하기까지 해야" 진짜 졸음 후보로 봅니다.
+     */
+    const isFlat =
+      std <=
+      baselineStd *
+        FLAT_STD_RATIO;
+
+    isBelowPersonalBaseline =
+      isLow && isFlat;
   } else {
     isBelowPersonalBaseline = false;
   }
@@ -167,14 +212,19 @@ let lastKnownIsDrowsy = false;
 /*
  * 눈 깜빡임 한 번에 "졸림"으로 반응하면
  * 화면이 계속 깜빡여서 오히려 정신 사나워요.
- * "졸림" 판정이 연속으로 3번 이상 나와야만
- * 진짜 졸린 것으로 인정합니다.
- * (0.1초 간격 분석 기준, 대략 0.3~0.5초 이상
- *  지속된 경우만 반응)
+ *
+ * "몇 번 연속으로 응답이 왔는지"가 아니라,
+ * "실제로 몇 초 동안 계속 졸린 상태가
+ * 이어졌는지"로 판단합니다. (서버 응답 속도가
+ * 들쭉날쭉해도 정확하게 재기 위함 - realtime.py의
+ * "40프레임(약 1.3초) 연속 감김" 방식과 같은 원리)
+ *
+ * 눈 깜빡임은 보통 0.1~0.4초면 끝나니까,
+ * 1.2초 이상 지속돼야만 진짜 졸음으로 인정합니다.
  */
-const DROWSY_CONFIRM_COUNT = 3;
-let consecutiveDrowsyCount = 0;
-let consecutiveNormalCount = 0;
+const DROWSY_CONFIRM_DURATION_MS = 1200;
+let drowsyStreakStartedAt = null;
+let normalStreakStartedAt = null;
 
 /*
  * 백엔드가 보내는 status 값 중, "졸음"으로 볼 값들입니다.
@@ -210,8 +260,8 @@ export function setEarContext({
    */
   earHistory = [];
 
-  consecutiveDrowsyCount = 0;
-  consecutiveNormalCount = 0;
+  drowsyStreakStartedAt = null;
+  normalStreakStartedAt = null;
   lastKnownIsDrowsy = false;
 
   /*
@@ -219,6 +269,7 @@ export function setEarContext({
    * 처음부터 다시 계산합니다.
    */
   baselineEar = null;
+  baselineStd = null;
   baselineSamples = [];
   isBelowPersonalBaseline = false;
   pendingBaselineChecks = [];
@@ -577,20 +628,44 @@ function handleServerMessage(
         ) &&
         wasBelowBaselineAtSendTime;
 
+      const now = Date.now();
+
       if (rawIsDrowsy) {
-        consecutiveDrowsyCount += 1;
-        consecutiveNormalCount = 0;
+        if (!drowsyStreakStartedAt) {
+          drowsyStreakStartedAt =
+            now;
+        }
+
+        normalStreakStartedAt =
+          null;
       } else {
-        consecutiveNormalCount += 1;
-        consecutiveDrowsyCount = 0;
+        if (!normalStreakStartedAt) {
+          normalStreakStartedAt =
+            now;
+        }
+
+        drowsyStreakStartedAt =
+          null;
       }
 
+      const drowsyStreakDuration =
+        drowsyStreakStartedAt
+          ? now -
+            drowsyStreakStartedAt
+          : 0;
+
+      const normalStreakDuration =
+        normalStreakStartedAt
+          ? now -
+            normalStreakStartedAt
+          : 0;
+
       const confirmedIsDrowsy =
-        consecutiveDrowsyCount >=
-        DROWSY_CONFIRM_COUNT
+        drowsyStreakDuration >=
+        DROWSY_CONFIRM_DURATION_MS
           ? true
-          : consecutiveNormalCount >=
-              DROWSY_CONFIRM_COUNT
+          : normalStreakDuration >=
+              DROWSY_CONFIRM_DURATION_MS
             ? false
             : lastKnownIsDrowsy;
 
