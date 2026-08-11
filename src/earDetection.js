@@ -213,6 +213,32 @@ function createFaceMesh() {
           },
         ),
       );
+
+      /*
+       * 얼굴이 잡히고 있다고 알립니다.
+       * (2번 주자 쪽에서 공부시간/집중시간
+       *  계산에 사용합니다)
+       */
+      if (
+        typeof window.setFaceDetected ===
+        "function"
+      ) {
+        window.setFaceDetected(
+          true,
+        );
+      }
+    } else {
+      /*
+       * 이번 프레임엔 얼굴이 안 잡혔다고 알립니다.
+       */
+      if (
+        typeof window.setFaceDetected ===
+        "function"
+      ) {
+        window.setFaceDetected(
+          false,
+        );
+      }
     }
   });
 

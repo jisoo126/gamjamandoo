@@ -75,31 +75,61 @@ let previewPreviousPanel = "create";
 /*
  * 스터디 방에 머문 시간 + 집중(순공) 시간 +
  * 졸음 감지 횟수를 기록합니다.
+ *
+ * "공부 시간"과 "집중 시간" 둘 다, 얼굴이 화면에
+ * 잡히고 있을 때만 1초씩 쌓입니다. (자리 비움/얼굴
+ * 미인식 시간은 아예 계산에서 빠집니다)
  */
 let studyTimerIntervalId = null;
-let studyStartedAt = null;
+let totalStudySeconds = 0;
 let focusedSeconds = 0;
 let drowsyEventCount = 0;
 let isSelfCurrentlyDrowsy = false;
 
+/*
+ * earDetection.js가 매 프레임 호출합니다.
+ * 얼굴이 화면에 잡히고 있는지 여부입니다.
+ * (처음엔 아직 판단 전이니 false로 시작 - 얼굴이
+ *  실제로 잡히기 전까지는 시간이 안 쌓입니다)
+ */
+let isFaceDetected = false;
+
+window.setFaceDetected = (
+  detected,
+) => {
+  isFaceDetected = Boolean(
+    detected,
+  );
+};
+
 function startStudyTimer() {
-  studyStartedAt = Date.now();
+  totalStudySeconds = 0;
   focusedSeconds = 0;
   drowsyEventCount = 0;
   isSelfCurrentlyDrowsy = false;
+  isFaceDetected = false;
 
   updateStudyTimerDisplay();
 
   studyTimerIntervalId =
     setInterval(() => {
       /*
-       * 지금 안 졸린 상태일 때만
-       * "집중 시간"을 1초씩 더합니다.
+       * 얼굴이 잡히고 있을 때만
+       * "공부 시간"을 쌓습니다.
        */
-      if (
-        !isSelfCurrentlyDrowsy
-      ) {
-        focusedSeconds += 1;
+      if (isFaceDetected) {
+        totalStudySeconds += 1;
+
+        /*
+         * 그중에서도, 졸리지 않은
+         * 상태일 때만 "집중 시간"을
+         * 같이 쌓습니다.
+         */
+        if (
+          !isSelfCurrentlyDrowsy
+        ) {
+          focusedSeconds += 1;
+        }
       }
 
       updateStudyTimerDisplay();
@@ -115,10 +145,11 @@ function stopStudyTimer() {
     studyTimerIntervalId = null;
   }
 
-  studyStartedAt = null;
+  totalStudySeconds = 0;
   focusedSeconds = 0;
   drowsyEventCount = 0;
   isSelfCurrentlyDrowsy = false;
+  isFaceDetected = false;
 
   ui.studyTimer.textContent =
     "00:00";
@@ -193,20 +224,9 @@ function setFocusRing(percent) {
 }
 
 function updateStudyTimerDisplay() {
-  if (!studyStartedAt) {
-    return;
-  }
-
-  const elapsedSeconds =
-    Math.floor(
-      (Date.now() -
-        studyStartedAt) /
-        1000,
-    );
-
   const timeText =
     formatDuration(
-      elapsedSeconds,
+      totalStudySeconds,
     );
 
   ui.studyTimer.textContent =
@@ -222,11 +242,14 @@ function updateStudyTimerDisplay() {
 
   ui.statsDrowsyCount.textContent = `${drowsyEventCount}회`;
 
+  /*
+   * 전체 집중도 = 집중(순공) 시간 ÷ 공부 시간
+   */
   const focusPercent =
-    elapsedSeconds > 0
+    totalStudySeconds > 0
       ? Math.round(
           (focusedSeconds /
-            elapsedSeconds) *
+            totalStudySeconds) *
             100,
         )
       : 0;

@@ -509,7 +509,7 @@ const appMarkup = `
 
         <div class="stats-row">
           <span class="stats-label">
-            집중(순공) 시간
+            집중 시간
           </span>
           <span
             id="statsFocusedTime"
